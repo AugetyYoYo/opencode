@@ -506,13 +506,28 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   const status = longRow.locator('[data-item-section="git"]')
   await expect(longRow).toBeVisible()
   await expect(content).toHaveAttribute("title", longFilename)
-  await expect.poll(() => content.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0)
+  // The name is never clipped: the tree scrolls sideways and the change letter sticks to the pane's edge.
   await expect
-    .poll(() => longRow.evaluate((element) => element.scrollWidth - element.clientWidth))
+    .poll(() => content.evaluate((element) => element.scrollWidth - element.clientWidth))
     .toBeLessThanOrEqual(0)
-  await expect(content).toHaveCSS("text-overflow", "clip")
+  await expect
+    .poll(() =>
+      longRow.evaluate((element) => {
+        const scroll = element.closest("[data-file-tree-virtualized-scroll]")!
+
+        return scroll.scrollWidth - scroll.clientWidth
+      }),
+    )
+    .toBeGreaterThan(0)
   await expect(status).toHaveText("A")
   await expect.poll(() => statusInset(status, "right")).toBeLessThanOrEqual(24)
+  await longRow.evaluate((element) => {
+    element.closest("[data-file-tree-virtualized-scroll]")!.scrollLeft = 1_000_000
+  })
+  await expect.poll(() => statusInset(status, "right")).toBeLessThanOrEqual(24)
+  await longRow.evaluate((element) => {
+    element.closest("[data-file-tree-virtualized-scroll]")!.scrollLeft = 0
+  })
   await viewport.evaluate((element) => element.setAttribute("dir", "rtl"))
   await expect.poll(() => statusInset(status, "left")).toBeLessThanOrEqual(24)
   await frontend.focus()
