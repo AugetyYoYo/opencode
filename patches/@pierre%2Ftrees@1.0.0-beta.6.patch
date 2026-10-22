@@ -123,7 +123,7 @@ index 305714319d9d988bfc025ecaaca662562a3a0ff7..8ab6a7b9b7734b1fa2e17c96743eeb01
  			stickyFolders: this.#viewOptions.stickyFolders
  		};
 diff --git a/dist/render/FileTreeView.js b/dist/render/FileTreeView.js
-index 7d3b818c43a7621ab9170da32b180232ed3c9472..0a9a88135f89e4a5c4448964ef08dc8de26b0447 100644
+index 7d3b818c43a7621ab9170da32b180232ed3c9472..2161c595046d3a98161f47576545726319f2009a 100644
 --- a/dist/render/FileTreeView.js
 +++ b/dist/render/FileTreeView.js
 @@ -360,7 +360,7 @@ function focusFirstMenuElement(menuElement) {
@@ -176,6 +176,15 @@ index 7d3b818c43a7621ab9170da32b180232ed3c9472..0a9a88135f89e4a5c4448964ef08dc8d
  	"use no memo";
  	const contextMenuAnchorRef = useRef(null);
  	const contextMenuTriggerRef = useRef(null);
+@@ -1272,7 +1274,7 @@ function FileTreeView({ composition, controller, gitStatusByPath, ignoredGitDire
+ 		const update = () => {
+ 			const nextItemCount = controller.getVisibleCount();
+ 			const nextViewportHeight = getCachedViewportHeight(measuredViewportHeightRef.current, initialViewportHeight);
+-			const maxScrollTop = Math.max(0, nextItemCount * itemHeight - nextViewportHeight);
++			const maxScrollTop = Math.max(0, nextItemCount * itemHeight - nextViewportHeight, scrollElement.scrollHeight - scrollElement.clientHeight);
+ 			if (scrollElement.scrollTop > maxScrollTop) scrollElement.scrollTop = maxScrollTop;
+ 			setLayoutState(computeFileTreeViewLayoutState({
+ 				controller,
 @@ -1752,6 +1754,7 @@ function FileTreeView({ composition, controller, gitStatusByPath, ignoredGitDire
  		ignoredInheritanceCache,
  		instanceId,

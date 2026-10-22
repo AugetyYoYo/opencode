@@ -34,7 +34,8 @@ const TREE_UNSAFE_CSS = `
     --trees-padding-inline: 8px; --trees-item-margin-x: 0px;
   }
   [data-file-tree-virtualized-root="true"] { padding-block-start: 4px; }
-  [data-file-tree-virtualized-scroll="true"] { padding-block: 0; padding-inline: 8px; overflow-x: auto; }
+  /* The patched scroll limit counts this padding and the horizontal scrollbar, so neither fights the wheel. */
+  [data-file-tree-virtualized-scroll="true"] { padding-block: 0 8px; padding-inline: 8px; overflow-x: auto; }
   /* Long rows scroll sideways rather than clip; every row is as wide as the widest one rendered. */
   [data-file-tree-virtualized-list="true"] { width: max-content; min-width: 100%; }
   [data-item-section="spacing"] {
