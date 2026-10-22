@@ -321,6 +321,8 @@ export function OpenInAppContextMenuV2(
   props: ParentProps<{
     state?: OpenInAppState
     resolvePath: (event: MouseEvent) => string | undefined
+    /** Keeps the trigger within its container, for content that clips its own rows rather than scrolling sideways. */
+    fit?: boolean
   }>,
 ) {
   const state = props.state
@@ -355,7 +357,8 @@ export function OpenInAppContextMenuV2(
       >
         <Menu.Context.Trigger
           as="div"
-          class="h-full w-full min-w-max flex flex-col min-h-0 flex-1"
+          class="h-full w-full flex flex-col min-h-0 flex-1"
+          classList={{ "min-w-max": !props.fit, "min-w-0": props.fit }}
           data-slot="file-tree-v2-context-trigger"
           data-context-menu-open={open() ? "" : undefined}
           on:contextmenu={{
