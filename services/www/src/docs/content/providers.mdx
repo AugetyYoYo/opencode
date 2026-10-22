@@ -27,6 +27,64 @@ Run `/connect`, choose a provider, and enter its credentials. Then run `/models`
 
 See the [Go guide](/console/go) for usage limits, endpoints, and privacy details.
 
+## ChatGPT
+
+Requests can use a ChatGPT Plus or Pro plan instead of an OpenAI API key. Connect **OpenAI** and choose a sign-in
+method:
+
+- **Sign in with ChatGPT** uses ChatGPT plan usage through the OpenAI API.
+- **Codex browser (legacy)** and **Codex device code (legacy)** use the Codex backend. Only models that Codex accepts
+  for ChatGPT accounts appear in `/models`.
+
+```text
+/connect
+# Select OpenAI, then Sign in with ChatGPT.
+/models
+```
+
+Usage counts against your ChatGPT plan instead of API billing, so these models show no cost.
+
+### Context limits
+
+With either ChatGPT sign-in method, OpenCode limits how much input it sends per request. Compaction starts before the
+input reaches the limit.
+
+| Model                                   | Input limit |
+| --------------------------------------- | ----------- |
+| GPT-6.1 Sol and newer                   | 500,000     |
+| Older models, such as GPT-6 and GPT-5.6 | 272,000     |
+
+The models accept more input than this. The limits exist because every request uses ChatGPT plan usage, and a long
+conversation resends its history on every step. Larger requests use more of your plan and reach its limits sooner. The
+limits match the default windows that OpenAI sets for ChatGPT plan usage. A model whose window is already below its
+limit keeps its own window.
+
+API-key connections use each model's full window.
+
+To use each model's full window with a ChatGPT sign-in, disable the plugin that applies the limits:
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["-opencode.provider.openai-context-caps"],
+}
+```
+
+To change the limit for one model instead, set its `limit`. Configured limits apply after the plugin.
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6-sol": {
+          "limit": { "context": 528000, "input": 400000, "output": 128000 },
+        },
+      },
+    },
+  },
+}
+```
+
 ## Custom
 
 Add a provider when its API is not already in the catalog. This OpenAI-compatible example defines the credential,
