@@ -91,23 +91,27 @@ const TREE_UNSAFE_CSS = `
     z-index: 1; align-self: stretch;
   }
   [data-item-section="git"]::before, [data-item-section="git"]::after {
-    content: ""; position: absolute; inset-block: 0; pointer-events: none;
+    content: ""; position: absolute; inset-block: 0; z-index: -1; pointer-events: none;
   }
+  /* The pane from the lane to the scroller's 8px edge, under the rounded end's corners. It stays within the row, as rows
+     touch and a taller cover would paint over their neighbours. */
   [data-item-section="git"]::before {
-    inset-inline-end: 100%; width: 16px;
-    background: linear-gradient(to right, transparent, var(--row-overlay)), linear-gradient(to right, transparent, var(--trees-bg));
+    inset-inline: 0 calc(-1 * (var(--trees-item-padding-x) + 8px));
+    background: var(--trees-bg);
   }
-  :host(:dir(rtl)) [data-item-section="git"]::before {
-    background: linear-gradient(to left, transparent, var(--row-overlay)), linear-gradient(to left, transparent, var(--trees-bg));
-  }
-  /* The row through its rounded end. The shadow paints the pane past it, outside its corners too. */
+  /* The row from the 16px fade over the name through its rounded end. */
   [data-item-section="git"]::after {
-    inset-inline: 0 calc(-1 * var(--trees-item-padding-x)); z-index: -1;
+    inset-inline: -16px calc(-1 * var(--trees-item-padding-x));
     border-start-end-radius: var(--trees-border-radius); border-end-end-radius: var(--trees-border-radius);
-    background: linear-gradient(var(--row-overlay), var(--row-overlay)), var(--trees-bg);
-    box-shadow: 8px 0 0 6px var(--trees-bg);
+    background:
+      linear-gradient(to right, transparent, var(--row-overlay) 16px),
+      linear-gradient(to right, transparent, var(--trees-bg) 16px);
   }
-  :host(:dir(rtl)) [data-item-section="git"]::after { box-shadow: -8px 0 0 6px var(--trees-bg); }
+  :host(:dir(rtl)) [data-item-section="git"]::after {
+    background:
+      linear-gradient(to left, transparent, var(--row-overlay) 16px),
+      linear-gradient(to left, transparent, var(--trees-bg) 16px);
+  }
 `
 
 function sameStringMap(a: ReadonlyMap<string, string> | undefined, b: ReadonlyMap<string, string> | undefined) {
