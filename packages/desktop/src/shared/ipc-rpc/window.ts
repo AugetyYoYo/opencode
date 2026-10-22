@@ -3,6 +3,9 @@ import { Rpc, RpcGroup } from "effect/rpc"
 
 export const WindowThemeReady = Rpc.make("WindowThemeReady")
 
+export const WindowRequestMicrophone = Rpc.make("WindowRequestMicrophone", { success: Schema.Boolean })
+export const WindowSetVoiceCallActive = Rpc.make("WindowSetVoiceCallActive", { payload: { active: Schema.Boolean } })
+
 export const WindowGetFocused = Rpc.make("WindowGetFocused", { success: Schema.Boolean })
 
 export const WindowGetFullscreen = Rpc.make("WindowGetFullscreen", { success: Schema.Boolean })
@@ -39,6 +42,8 @@ export const WindowSetTrafficLightsPosition = Rpc.make("WindowSetTrafficLightsPo
 })
 
 export const WindowRpcs = RpcGroup.make(
+  WindowRequestMicrophone,
+  WindowSetVoiceCallActive,
   WindowThemeReady,
   WindowGetFocused,
   WindowGetFullscreen,

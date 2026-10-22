@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, systemPreferences } from "electron"
 import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
 import { IpcPortHandoff } from "../ipc-transport"
@@ -18,6 +18,14 @@ export const windowHandlers = WindowRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
 
     return WindowRpcs.of({
+      WindowRequestMicrophone: () =>
+        Effect.promise(() =>
+          process.platform === "darwin" ? systemPreferences.askForMediaAccess("microphone") : Promise.resolve(true),
+        ),
+      WindowSetVoiceCallActive: ({ active }, context) =>
+        Effect.sync(() => {
+          sender(handoff, context).setBackgroundThrottling(!active)
+        }),
       WindowThemeReady: (_args, context) =>
         Effect.sync(() => {
           const win = BrowserWindow.fromWebContents(sender(handoff, context))

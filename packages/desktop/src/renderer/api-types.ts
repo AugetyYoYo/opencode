@@ -50,6 +50,8 @@ export type ElectronAPI = {
   readClipboardImage(): Promise<ClipboardImage | null>
   writeClipboardText(text: string): Promise<void>
   getWindowFocused(): Promise<boolean>
+  requestMicrophone(): Promise<boolean>
+  setVoiceCallActive(active: boolean): Promise<void>
   getWindowFullscreen(): Promise<boolean>
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void
   setWindowFocus(): Promise<void>

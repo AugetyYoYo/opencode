@@ -1,6 +1,20 @@
 import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
+  "experiment.voiceCalls": "Voice calls",
+  "voice.call": "Call",
+  "voice.mute": "Mute",
+  "voice.unmute": "Unmute",
+  "voice.end": "End",
+  "voice.rejoin": "Rejoin",
+  "voice.level": "Audio level",
+  "voice.connecting": "Connecting…",
+  "voice.you": "You:",
+  "voice.assistant": "OpenCode:",
+  "voice.failure.unavailable": "Console voice is unavailable on this server.",
+  "voice.failure.microphone": "Microphone access is required to call.",
+  "voice.failure.dropped": "The call disconnected.",
+  "voice.failure.connection": "Couldn’t connect the call.",
   "experiment.activityChip": "Activity chip",
   "experiment.activityChip.today": "Today",
   "experiment.activityChip.orb": "CSS orb",

@@ -6,6 +6,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, on, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
+import { VoiceComposer } from "@/voice/composer"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
 import { setCursorPosition } from "@/composer/editor/dom"
@@ -490,12 +491,14 @@ export function ActiveSessionComposerRegion(props: {
             // The container for the composer's `cqw` caps: only the composer re-evaluates as a panel beside it
             // animates the chat's width.
             <div class="@container">
-              <Composer
-                model={props.model.composer}
-                borderUnderlay
-                readOnly={props.model.queue.undoing()}
-                suggestionBoundary={props.suggestionBoundary}
-              />
+              <VoiceComposer session={props.session.data.info()}>
+                <Composer
+                  model={props.model.composer}
+                  borderUnderlay
+                  readOnly={props.model.queue.undoing()}
+                  suggestionBoundary={props.suggestionBoundary}
+                />
+              </VoiceComposer>
             </div>
           }
         >
