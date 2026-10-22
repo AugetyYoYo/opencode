@@ -3,6 +3,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { decodeArguments, type ToolCall } from "./protocol"
 import { ReplyWatch } from "./replies"
+import { messageExcerpts } from "./messages"
 
 export class VoiceTools {
   readonly replies = new ReplyWatch()
@@ -74,12 +75,19 @@ export class VoiceTools {
     }
 
     if (call.name === "create_session") {
-      if (!args.directory) throw new Error("directory required")
+      const directory = args.directory
+
+      if (!directory) throw new Error("directory required")
+      const projects = await api.project.list({ archived: false }, options)
+
+      if (!projects.some((project) => project.canonical === directory || project.sandboxes.includes(directory)))
+        return { error: "Directory is not a known project or worktree on this server. No session was created." }
+
       const source = await api.session.get({ sessionID: request.sessionID }, options)
       signal.throwIfAborted()
 
       const created = this.ctx.data.session.create({
-        location: { directory: args.directory },
+        location: { directory },
         title: args.title,
         model: source.model,
         agent: source.agent,
@@ -161,7 +169,10 @@ export class VoiceTools {
       ])
       this.observed.set(request.id, observed)
 
-      return { session, messages }
+      return {
+        session: { id: session.id, title: session.title, outcome: session.outcome, time: session.time },
+        messages: { data: messageExcerpts(messages.data), cursor: messages.cursor },
+      }
     }
 
     throw new Error("Unknown voice tool")

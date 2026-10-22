@@ -5,6 +5,7 @@ import { createStore } from "solid-js/store"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useServer } from "@/runtime/server/current"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import en from "@/runtime/i18n/en"
 import { useVoice } from "./context"
 import "./voice.css"
@@ -20,10 +21,12 @@ export function VoiceComposer(props: ParentProps<{ session: SessionInfo | undefi
   const voice = useVoice()
   const server = useServer()
   const language = useLanguage()
+  const platform = usePlatform()
   const [state, setState] = createStore({ enabled: toggle() })
   onMount(() => onCleanup(voice.mountComposer()))
   onCleanup(motionTuning.subscribe(() => setState("enabled", toggle())))
-  const enabled = () => import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && state.enabled
+  const enabled = () =>
+    platform.platform === "desktop" && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && state.enabled
   const active = () => voice.state.status !== "idle"
   createEffect(() => {
     const session = props.session
