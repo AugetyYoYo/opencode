@@ -95,6 +95,11 @@ describe("sessionFormRequest", () => {
     ],
     ["finds web search consent in a nested child session", { child: [search("search", "child")] }, "search"],
     [
+      "finds an MCP elicitation in the current session",
+      { root: [{ ...question("mcp", "root"), metadata: { kind: "mcp-elicitation", server: "release" } }] },
+      "mcp",
+    ],
+    [
       "keeps web search ahead of a later question",
       { root: [search("search", "root"), question("q", "root")] },
       "search",
