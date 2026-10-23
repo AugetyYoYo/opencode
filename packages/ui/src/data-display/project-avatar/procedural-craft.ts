@@ -520,30 +520,33 @@ const PRINT: Definition[] = [
       }
     },
     paint: (pixels, p) => {
-      const cover = (prefix: string, x: number, y: number) => {
+      const layer = (prefix: string, ox: number, oy: number) => {
         const [kind, cx, cy, size, angle] = colors(p, prefix, 5)
-        const u = x / 32 - cx
-        const v = y / 32 - cy
-        const along = u * Math.cos(angle) + v * Math.sin(angle)
-        const d = Math.hypot(u, v)
+        const cos = Math.cos(angle)
+        const sin = Math.sin(angle)
+        const bands = 4 + size * 8
 
-        const shapes = [
-          () => (d < size ? 1 : 0),
-          () => (Math.floor((along + 2) * (4 + size * 8)) % 2 ? 1 : 0),
-          () => (along > 0 ? 1 : 0),
-          () => (Math.abs(d - size) < size * 0.4 ? 1 : 0),
-          () => (grain(Math.floor(x / 3), Math.floor(y / 3), 9) < clamp01(0.5 - along) ? 1 : 0),
-          () => (fbm(x * 0.12 + cx * 20, y * 0.12 + cy * 20) > 0.52 - size * 0.3 ? 1 : 0),
-        ]
+        return (x: number, y: number) => {
+          const u = (x + ox) / 32 - cx
+          const v = (y + oy) / 32 - cy
+          const along = u * cos + v * sin
 
-        return shapes[kind]() * (0.78 + 0.22 * fbm(x * 0.3 + 7, y * 0.3)) * (grain(x, y, p.salt) < 0.1 ? 0.3 : 1)
+          if (kind === 1) return Math.floor((along + 2) * bands) % 2
+          if (kind === 2) return along > 0 ? 1 : 0
+          const d = Math.hypot(u, v)
+
+          return (kind === 0 ? d < size : Math.abs(d - size) < size * 0.4) ? 1 : 0
+        }
       }
 
-      pixels.each((x, y) => {
-        const a = cover("a", x + 0.5, y + 0.5)
-        const b = cover("b", x + 0.5 + p.mx, y + 0.5 + p.my)
+      const a = layer("a", 0.5, 0.5)
+      const b = layer("b", 0.5 + p.mx, 0.5 + p.my)
 
-        return multiply(multiply(p.paper, mix(0xffffff, p.a, a)), mix(0xffffff, p.b, b))
+      // Uneven coverage and speckle are properties of the paper, so both inks share them.
+      pixels.each((x, y) => {
+        const texture = (0.78 + 0.22 * fbm(x * 0.3 + 7, y * 0.3)) * (grain(x, y, p.salt) < 0.1 ? 0.3 : 1)
+
+        return multiply(multiply(p.paper, mix(0xffffff, p.a, a(x, y) * texture)), mix(0xffffff, p.b, b(x, y) * texture))
       })
     },
   },
