@@ -4,73 +4,49 @@
 // grid of pixels that is scaled up nearest-neighbour, with limited palettes and ordered dithering. Only the components
 // lab imports this module.
 
+import { cyrb53, drawProjectIcon, generateProjectIcon, mulberry32, tileMask, valueNoise, type GeneratedProjectIcon } from "./generated"
+import { CRAFT } from "./procedural-craft"
 import {
-  cyrb53,
-  drawProjectIcon,
-  generateProjectIcon,
-  mulberry32,
-  PALETTES,
-  tileMask,
-  valueNoise,
-  type GeneratedProjectIcon,
-} from "./generated"
+  clamp01,
+  colors,
+  css,
+  dither,
+  ease,
+  int,
+  legible,
+  luma,
+  mix,
+  normalize,
+  ones,
+  palette,
+  pick,
+  Pixels,
+  prefixed,
+  ramped,
+  retry,
+  seed,
+  shade,
+  shuffle,
+  smoothstep,
+  stars,
+  threshold,
+  tint,
+  type Definition,
+} from "./procedural-kit"
+import { MACHINE } from "./procedural-machine"
+import { WORLD } from "./procedural-world"
 
 export type ProjectIconStyle = {
   readonly id: string
   readonly name: string
   readonly label: string
+  /** The gallery group the style belongs to. */
+  readonly family: string
   /** Whether the style has a hover animation. */
   readonly animated: boolean
   readonly generate: (key: string) => GeneratedProjectIcon
   /** Draws the icon `seconds` into its hover animation (0 is the static frame) into a square `px` × `px` context. */
   readonly draw: (ctx: CanvasRenderingContext2D, px: number, icon: GeneratedProjectIcon, seconds: number) => void
-}
-
-type Params = Readonly<Record<string, number>>
-
-type Random = () => number
-
-type Definition = {
-  id: string
-  name: string
-  label: string
-  animated?: boolean
-  resolve: (random: (tag: string) => Random) => Record<string, number>
-} & (
-  | { paint: (pixels: Pixels, p: Params, t: number) => void }
-  | { vector: (ctx: CanvasRenderingContext2D, px: number, p: Params, t: number) => void }
-)
-
-class Pixels {
-  readonly cells: Int32Array
-
-  constructor(readonly n: number) {
-    this.cells = new Int32Array(n * n)
-  }
-
-  set(x: number, y: number, color: number) {
-    if (x < 0 || y < 0 || x >= this.n || y >= this.n) return
-    this.cells[y * this.n + x] = color
-  }
-
-  fill(color: number) {
-    this.cells.fill(color)
-  }
-
-  rect(x: number, y: number, width: number, height: number, color: number) {
-    for (let row = y; row < y + height; row++)
-      for (let column = x; column < x + width; column++) this.set(column, row, color)
-  }
-
-  /** Paints every cell that `color` returns a color for. */
-  each(color: (x: number, y: number) => number | undefined) {
-    for (let y = 0; y < this.n; y++)
-      for (let x = 0; x < this.n; x++) {
-        const value = color(x, y)
-
-        if (value !== undefined) this.cells[y * this.n + x] = value
-      }
-  }
 }
 
 // Curated colors for scenes James's paper-and-ink palettes do not cover.
@@ -120,17 +96,69 @@ const GLYPHS = [
   0b101101111, 0b111100111, 0b010101010, 0b011010110, 0b111001001,
 ]
 
+// The seven tetrominoes as cells, and their colors: the guideline set, a handheld's greys, an 8-bit set and pastels.
+const TETROMINOES = [
+  [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+    [3, 0],
+  ],
+  [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
+  ],
+  [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+    [1, 1],
+  ],
+  [
+    [1, 0],
+    [2, 0],
+    [0, 1],
+    [1, 1],
+  ],
+  [
+    [0, 0],
+    [1, 0],
+    [1, 1],
+    [2, 1],
+  ],
+  [
+    [0, 0],
+    [0, 1],
+    [1, 1],
+    [2, 1],
+  ],
+  [
+    [2, 0],
+    [0, 1],
+    [1, 1],
+    [2, 1],
+  ],
+]
+
+const TETROMINO_COLORS = [
+  [0x2ad4e6, 0xf2d230, 0xa64ce0, 0x46d04a, 0xe8413c, 0x3a64e8, 0xf0902a],
+  [0x9bbc0f, 0x8bac0f, 0x306230, 0x8bac0f, 0x306230, 0x9bbc0f, 0x306230],
+  [0x3cbcfc, 0xf8b800, 0xd800cc, 0x58d854, 0xf83800, 0x0058f8, 0xfca044],
+  [0x9ad8e8, 0xf6e3a1, 0xc9b1e8, 0xb5e3b0, 0xf2a7a7, 0xa7b8f2, 0xf5c09a],
+]
+
 const RULES = [18, 22, 30, 60, 86, 90, 102, 110, 126, 150, 182]
 
 // An isometric cube eight pixels wide: top, left and right faces.
 const CUBE = ["...TT...", ".TTTTTT.", "LTTTTTTR", "LLLTTRRR", "LLLLRRRR", "LLLLRRRR", ".LLLRRR.", "...LR..."]
 
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-
 const DEFINITIONS: Definition[] = [
   {
     id: "pixel-mesh",
     name: "Pixel mesh",
+    family: "Gradients",
     label: "James's mesh waves on a 16 grid, dithered to its four inks",
     animated: true,
     resolve: (random) => {
@@ -160,6 +188,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "dither",
     name: "Dither ramp",
+    family: "Pixel and dither",
     label: "A three-step gradient through a 4×4 Bayer matrix",
     animated: true,
     resolve: (random) => {
@@ -198,6 +227,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "plasma",
     name: "Plasma",
+    family: "Pixel and dither",
     label: "Demoscene sine plasma posterised to a five-step ramp",
     animated: true,
     resolve: (random) => {
@@ -238,6 +268,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "contour",
     name: "Contours",
+    family: "Pixel and dither",
     label: "Topographic bands of value noise with darker iso-lines",
     animated: true,
     resolve: (random) => {
@@ -280,6 +311,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "cells",
     name: "Cells",
+    family: "Pixel and dither",
     label: "Voronoi cells from four to six seeds, with one-pixel seams",
     animated: true,
     resolve: (random) => ({ grid: 16, seed: seed(random("cells")), ...palette(random("palette")) }),
@@ -312,6 +344,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "rings",
     name: "Rings",
+    family: "Patterns",
     label: "Off-centre concentric rings stepping through three inks",
     animated: true,
     resolve: (random) => {
@@ -338,6 +371,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "kilim",
     name: "Kilim",
+    family: "Patterns",
     label: "Stepped diamonds or squares, mirrored like a woven rug",
     animated: true,
     resolve: (random) => {
@@ -374,6 +408,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "triangles",
     name: "Triangles",
+    family: "Patterns",
     label: "Four diagonal Truchet tiles; they flip one by one on hover",
     animated: true,
     resolve: (random) => {
@@ -409,6 +444,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "quilt",
     name: "Quilt",
+    family: "Patterns",
     label: "Half-square triangles mirrored into a four-patch block",
     resolve: (random) => {
       const r = random("quilt")
@@ -440,45 +476,42 @@ const DEFINITIONS: Definition[] = [
   {
     id: "weave",
     name: "Weave",
-    label: "Two-pixel warp and weft threads in a plain or twill weave",
+    family: "Patterns",
+    label: "Basket or twill weave of flat two-pixel strands, each lit along one edge",
     resolve: (random) => {
       const r = random("weave")
-      // Three threads at most, so the over-under still reads at 16 px.
-      const [a, b, c] = shuffle(r, [0, 1, 2, 3, 4])
-
-      const stripes = (other: number) => {
-        const half = Array.from({ length: 4 }, () => (r() < 0.5 ? a : other))
-
-        return [...half, ...half.toReversed()]
-      }
-
-      const warp = stripes(b)
+      const all = shuffle(r, colors(palette(random("palette"))))
 
       return {
         grid: 16,
-        twill: r() < 0.6 ? 1 : 0,
-        ...prefixed("w", warp),
-        ...prefixed("f", r() < 0.5 ? warp : stripes(c)),
-        ...palette(random("palette")),
+        twill: r() < 0.35 ? 1 : 0,
+        strands: r() < 0.5 ? 2 : 1,
+        warp: all[0],
+        weft: legible(r, all.slice(1), all[0]),
+        accent: all[1],
+        stripe: r() < 0.4 ? 1 : 0,
       }
     },
     paint: (pixels, p) => {
-      const all = colors(p)
-
       pixels.each((x, y) => {
-        const i = Math.floor(x / 2)
-        const j = Math.floor(y / 2)
-        const over = p.twill ? (i + j) % 4 < 2 : (i + j) % 2 === 0
+        const cell = 4
+        const i = Math.floor(x / cell)
+        const j = Math.floor(y / cell)
+        const across = p.twill ? (i + j) % 4 < 2 : (i + j) % 2 === 0
+        const along = across ? y % cell : x % cell
+        const strand = Math.floor(along / (cell / p.strands))
+        const edge = along % (cell / p.strands)
+        const base = across ? p.weft : p.stripe && i % 3 === 1 ? p.accent : p.warp
+        const lit = edge === 0 ? tint(base, 0.18) : edge === cell / p.strands - 1 ? shade(base, 0.62) : base
 
-        if (over) return x % 2 ? shade(all[p[`w${i}`]], 0.8) : all[p[`w${i}`]]
-
-        return y % 2 ? shade(all[p[`f${j}`]], 0.8) : all[p[`f${j}`]]
+        return strand % 2 && p.strands === 2 ? shade(lit, 0.9) : lit
       })
     },
   },
   {
     id: "one-bit",
     name: "1-bit",
+    family: "Bits and symbols",
     label: "A classic 8×8 fill pattern in one ink; it scrolls on hover",
     animated: true,
     resolve: (random) => {
@@ -506,6 +539,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "glyphs",
     name: "Glyphs",
+    family: "Bits and symbols",
     label: "Four 3×3 runes on coloured tiles; they cycle on hover",
     animated: true,
     resolve: (random) => ({ grid: 16, seed: seed(random("glyphs")), ...palette(random("palette")) }),
@@ -544,6 +578,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "flag",
     name: "Flag",
+    family: "Bits and symbols",
     label: "Stripe, cross and canton compositions, like an invented flag",
     resolve: (random) => {
       const r = random("flag")
@@ -576,6 +611,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "identicon",
     name: "Identicon",
+    family: "Characters",
     label: "A mirrored 6×6 sprite on a tinted ground",
     resolve: (random) => {
       const r = random("sprite")
@@ -607,6 +643,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "critter",
     name: "Critter",
+    family: "Characters",
     label: "A mirrored little creature with see-through eyes; it walks and blinks on hover",
     animated: true,
     resolve: (random) => {
@@ -664,6 +701,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "phosphor",
     name: "Phosphor",
+    family: "Characters",
     label: "A glowing sprite on a dark tube with scanlines; the roll bar passes on hover",
     animated: true,
     resolve: (random) => {
@@ -706,6 +744,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "planet",
     name: "Planet",
+    family: "Scenes",
     label: "A banded, dithered planet, sometimes ringed; it turns on hover",
     animated: true,
     resolve: (random) => {
@@ -756,6 +795,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "moon",
     name: "Moon",
+    family: "Scenes",
     label: "A cratered moon in phase with a faint halo; it waxes on hover",
     animated: true,
     resolve: (random) => {
@@ -805,6 +845,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "starfield",
     name: "Starfield",
+    family: "Scenes",
     label: "Stars, two with cross glints, over a dithered nebula; they twinkle on hover",
     animated: true,
     resolve: (random) => {
@@ -831,18 +872,18 @@ const DEFINITIONS: Definition[] = [
 
         const level = dither((cloud - 0.4) / 0.3, 3, x, y)
 
-        return level ? mix(base, p.nebula, level * 0.3) : base
+        return level ? mix(base, p.nebula, level * 0.18) : base
       })
       const rand = mulberry32(p.seed)
       Array.from({ length: 10 }, (_, i) => {
-        const x = Math.floor(rand() * 16)
-        const y = Math.floor(rand() * 16)
-        const level = [0.35, 0.6, 1][Math.floor(rand() * 3)]
+        const x = i < 2 ? 2 + Math.floor(rand() * 12) : Math.floor(rand() * 16)
+        const y = i < 2 ? 2 + Math.floor(rand() * 12) : Math.floor(rand() * 16)
+        const level = [0.55, 0.8, 1][Math.floor(rand() * 3)]
         const twinkle = 1 - 0.45 * (1 - Math.cos(t * (2 + rand() * 4)))
         pixels.set(x, y, mix(p.space, i % 3 ? 0xfff6e0 : 0xdfe9ff, (i < 2 ? 1 : level) * twinkle))
 
         if (i >= 2) return
-        const glint = mix(p.space, 0xfff6e0, 0.45 * twinkle)
+        const glint = mix(p.space, 0xfff6e0, 0.7 * twinkle)
         pixels.set(x - 1, y, glint)
         pixels.set(x + 1, y, glint)
         pixels.set(x, y - 1, glint)
@@ -853,6 +894,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "horizon",
     name: "Horizon",
+    family: "Scenes",
     label: "A dithered sky, a sun and two ridgelines; they drift on hover",
     animated: true,
     resolve: (random) => {
@@ -892,6 +934,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "sundown",
     name: "Sundown",
+    family: "Scenes",
     label: "A slatted retro sun over a perspective grid; the slats rise on hover",
     animated: true,
     resolve: (random) => {
@@ -925,6 +968,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "sprout",
     name: "Sprout",
+    family: "Scenes",
     label: "A plant with leaves and a bloom on a strip of soil; it sways on hover",
     animated: true,
     resolve: (random) => {
@@ -1013,6 +1057,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "iso",
     name: "Iso blocks",
+    family: "Scenes",
     label: "Isometric cubes stacked on a 2×2 footprint, lit from the top left",
     resolve: (random) => {
       const r = random("iso")
@@ -1066,65 +1111,73 @@ const DEFINITIONS: Definition[] = [
   {
     id: "stack",
     name: "Stack",
-    label: "Bevelled pieces stacked like a falling-block game",
-    resolve: (random) => ({ grid: 16, seed: seed(random("stack")), ...palette(random("palette")) }),
-    paint: (pixels, p) => {
-      const inks = colors(p).slice(1)
+    family: "Geometry",
+    label: "Tetrominoes dropped into an eight-wide well, with the next piece falling; it lands on hover",
+    animated: true,
+    resolve: (random) => {
+      const r = random("stack")
+
+      return {
+        grid: 16,
+        seed: seed(r),
+        pieces: int(r, 12, 18),
+        ...prefixed("t", pick(r, TETROMINO_COLORS)),
+        well: pick(r, [0x0b0d14, 0x101010, 0x14102a, 0x0a1a1f]),
+      }
+    },
+    paint: (pixels, p, t) => {
+      const tints = colors(p, "t", 7)
       const rand = mulberry32(p.seed)
-      const heights = Array.from({ length: 4 }, () => 1 + Math.floor(rand() * 4))
-      const piece = Array.from({ length: 16 }, () => -1)
-      const sizes: number[] = []
-      const tones: number[] = []
+      const board = Array.from({ length: 64 }, () => -1)
+      const filled = (x: number, y: number) => x < 0 || x > 7 || y > 7 || (y >= 0 && board[y * 8 + x] >= 0)
+      const fits = (cells: number[][], x: number, y: number) => cells.every(([cx, cy]) => !filled(x + cx, y + cy))
 
-      for (let y = 3; y >= 0; y--)
-        for (let x = 0; x < 4; x++) {
-          if (3 - y >= heights[x]) continue
-          const i = y * 4 + x
-          const left = x > 0 ? piece[i - 1] : -1
-          const below = y < 3 ? piece[i + 4] : -1
+      // Drop each piece where it leaves the fewest holes of six random columns and turns, as a player would, keeping
+      // the top three rows clear.
+      Array.from({ length: p.pieces }, () => {
+        const kind = Math.floor(rand() * 7)
 
-          const join =
-            left >= 0 && sizes[left] < 4 && rand() < 0.5
-              ? left
-              : below >= 0 && sizes[below] < 4 && rand() < 0.45
-                ? below
-                : -1
+        const [cells, x, y] = Array.from({ length: 6 }, () => {
+          const cells = turned(TETROMINOES[kind], Math.floor(rand() * 4))
+          const x = Math.floor(rand() * (9 - (Math.max(...cells.map(([cx]) => cx)) + 1)))
+          let y = -2
 
-          if (join >= 0) {
-            piece[i] = join
-            sizes[join]++
-            continue
-          }
+          while (fits(cells, x, y + 1)) y++
+          const own = (cx: number, cy: number) => cells.some(([ox, oy]) => ox === cx && oy === cy)
+          const holes = cells.filter(([cx, cy]) => !own(cx, cy + 1) && !filled(x + cx, y + cy + 1)).length
 
-          const options = inks.filter((ink) => ink !== tones[left] && ink !== tones[below])
-          piece[i] = sizes.length
-          sizes.push(1)
-          tones.push(options[Math.floor(rand() * options.length)])
-        }
+          return [cells, x, y, y - holes * 3] as const
+        }).toSorted((a, b) => b[3] - a[3])[0]
 
-      const at = (x: number, y: number) => (x < 0 || y < 0 || x > 3 || y > 3 ? -2 : piece[y * 4 + x])
-      const ground = mix(0x101114, ramped(inks)[0], 0.3)
-
-      pixels.each((x, y) => {
-        const cx = Math.floor(x / 4)
-        const cy = Math.floor(y / 4)
-        const id = at(cx, cy)
-
-        if (id < 0) return ground
-        const lx = x % 4
-        const ly = y % 4
-
-        if ((lx === 0 && at(cx - 1, cy) !== id) || (ly === 0 && at(cx, cy - 1) !== id)) return tint(tones[id], 0.35)
-
-        if ((lx === 3 && at(cx + 1, cy) !== id) || (ly === 3 && at(cx, cy + 1) !== id)) return shade(tones[id], 0.62)
-
-        return tones[id]
+        if (cells.some(([, cy]) => y + cy < 3)) return
+        cells.forEach(([cx, cy]) => (board[(y + cy) * 8 + x + cx] = kind))
       })
+
+      const kind = Math.floor(rand() * 7)
+      const falling = turned(TETROMINOES[kind], Math.floor(rand() * 4))
+      const fx = Math.floor(rand() * (9 - (Math.max(...falling.map(([x]) => x)) + 1)))
+      let landing = 0
+
+      while (fits(falling, fx, landing + 1)) landing++
+      const fy = Math.min(landing, Math.floor(t * 4))
+
+      pixels.fill(p.well)
+
+      const block = (bx: number, by: number, color: number) => {
+        pixels.set(bx * 2, by * 2, tint(color, 0.45))
+        pixels.set(bx * 2 + 1, by * 2, color)
+        pixels.set(bx * 2, by * 2 + 1, color)
+        pixels.set(bx * 2 + 1, by * 2 + 1, shade(color, 0.6))
+      }
+
+      board.forEach((piece, i) => piece >= 0 && block(i % 8, Math.floor(i / 8), tints[piece]))
+      falling.forEach(([cx, cy]) => block(fx + cx, fy + cy, tints[kind]))
     },
   },
   {
     id: "maze",
     name: "Maze",
+    family: "Geometry",
     label: "A 5×5 backtracker maze with its route marked; a runner walks it on hover",
     animated: true,
     resolve: (random) => {
@@ -1224,6 +1277,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "rule",
     name: "Rule",
+    family: "Geometry",
     label: "An elementary cellular automaton grown from a random first row; it scrolls on hover",
     animated: true,
     resolve: (random) => {
@@ -1266,6 +1320,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "arcs",
     name: "Arcs",
+    family: "Geometry",
     label: "Smooth Truchet quarter-circles; tiles turn on hover",
     animated: true,
     resolve: (random) => {
@@ -1312,6 +1367,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "bauhaus",
     name: "Bauhaus",
+    family: "Geometry",
     label: "Circles, halves and quarters on a 2×2 grid; forms turn on hover",
     animated: true,
     resolve: (random) => ({ seed: seed(random("bauhaus")), ...palette(random("palette")) }),
@@ -1363,6 +1419,7 @@ const DEFINITIONS: Definition[] = [
   {
     id: "sweep",
     name: "Sweep",
+    family: "Gradients",
     label: "A conic sweep through three inks with a soft highlight; it turns on hover",
     animated: true,
     resolve: (random) => {
@@ -1397,15 +1454,51 @@ const MESH: ProjectIconStyle = {
   id: "mesh",
   name: "Mesh",
   label: "The current default: James's mesh gradient with film grain",
+  family: "Gradients",
   animated: true,
   generate: generateProjectIcon,
   draw: drawProjectIcon,
 }
 
-export const PROJECT_ICON_STYLES: readonly ProjectIconStyle[] = [MESH, ...DEFINITIONS.map(define)]
+/** The gallery's groups, in order: the first set of styles, then the second set from the craft, world and machine files. */
+export const PROJECT_ICON_FAMILIES = [
+  "Gradients",
+  "Pixel and dither",
+  "Patterns",
+  "Bits and symbols",
+  "Characters",
+  "Scenes",
+  "Geometry",
+  "Textiles",
+  "Print",
+  "Art movements",
+  "Nature and materials",
+  "Creatures",
+  "Objects",
+  "Emblems",
+  "Retro tech",
+  "Tiling and curves",
+]
+
+export const PROJECT_ICON_STYLES: readonly ProjectIconStyle[] = [
+  MESH,
+  ...[...DEFINITIONS, ...CRAFT, ...WORLD, ...MACHINE].map(define),
+].toSorted((a, b) => PROJECT_ICON_FAMILIES.indexOf(a.family) - PROJECT_ICON_FAMILIES.indexOf(b.family))
 
 export function projectIconStyle(id: string) {
   return PROJECT_ICON_STYLES.find((style) => style.id === id) ?? MESH
+}
+
+// A tetromino's cells after `turns` quarter turns, moved back to the origin.
+function turned(cells: number[][], turns: number) {
+  const rotated = Array.from({ length: turns }).reduce<number[][]>(
+    (list) => list.map(([x, y]) => [-y, x]),
+    cells,
+  )
+  const minX = Math.min(...rotated.map(([x]) => x))
+  const minY = Math.min(...rotated.map(([, y]) => y))
+
+  return rotated.map(([x, y]) => [x - minX, y - minY])
 }
 
 function define(definition: Definition): ProjectIconStyle {
@@ -1413,6 +1506,7 @@ function define(definition: Definition): ProjectIconStyle {
     id: definition.id,
     name: definition.name,
     label: definition.label,
+    family: definition.family,
     animated: definition.animated ?? false,
     generate: (key) => ({
       style: definition.id,
@@ -1466,114 +1560,4 @@ function clip(ctx: CanvasRenderingContext2D, px: number) {
       image.data[(row * px + column) * 4 + 3] *= tileMask((column + 0.5) / px, (row + 0.5) / px, px)
 
   ctx.putImageData(image, 0, 0)
-}
-
-function stars(pixels: Pixels, rand: Random, sky: number, count: number) {
-  Array.from({ length: count }, () =>
-    pixels.set(Math.floor(rand() * pixels.n), Math.floor(rand() * pixels.n), mix(sky, 0xffffff, 0.3 + rand() * 0.5)),
-  )
-}
-
-function palette(random: Random) {
-  return prefixed(
-    "c",
-    PALETTES[Math.floor(random() * PALETTES.length)].map((color) => parseInt(color.slice(1), 16)),
-  )
-}
-
-function prefixed(prefix: string, values: number[]) {
-  return Object.fromEntries(values.map((value, i) => [`${prefix}${i}`, value]))
-}
-
-function colors(p: Params, prefix = "c", count = 5) {
-  return Array.from({ length: count }, (_, i) => p[`${prefix}${i}`])
-}
-
-function ramped(list: number[]) {
-  return list.toSorted((a, b) => luma(a) - luma(b))
-}
-
-// A color from `list` that stands out against `against`, or the one that stands out most.
-function legible(random: Random, list: number[], against: number) {
-  const contrast = (color: number) => Math.abs(luma(color) - luma(against))
-  const clear = list.filter((color) => contrast(color) > 0.4)
-
-  return clear.length ? pick(random, clear) : list.toSorted((a, b) => contrast(b) - contrast(a))[0]
-}
-
-function pick<T>(random: Random, list: readonly T[]) {
-  return list[Math.floor(random() * list.length)]
-}
-
-function shuffle<T>(random: Random, list: readonly T[]) {
-  return list
-    .map((value) => ({ value, order: random() }))
-    .toSorted((a, b) => a.order - b.order)
-    .map((entry) => entry.value)
-}
-
-function retry<T>(make: () => T, ok: (value: T) => boolean): T {
-  const value = make()
-
-  return ok(value) ? value : retry(make, ok)
-}
-
-function seed(random: Random) {
-  return Math.floor(random() * 4294967296)
-}
-
-function ones(bits: number) {
-  return bits.toString(2).replaceAll("0", "").length
-}
-
-function threshold(x: number, y: number) {
-  return (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16
-}
-
-// Ordered dithering: which of `levels` steps a value in [0, 1] takes at this cell.
-function dither(value: number, levels: number, x: number, y: number) {
-  return Math.min(levels - 1, Math.floor(clamp01(value) * (levels - 1) + threshold(x, y)))
-}
-
-function mix(a: number, b: number, t: number) {
-  const k = clamp01(t)
-  const channel = (shift: number) => Math.round(((a >> shift) & 255) * (1 - k) + ((b >> shift) & 255) * k)
-
-  return (channel(16) << 16) | (channel(8) << 8) | channel(0)
-}
-
-function shade(color: number, amount: number) {
-  return mix(0x000000, color, amount)
-}
-
-function tint(color: number, amount: number) {
-  return mix(color, 0xffffff, amount)
-}
-
-function luma(color: number) {
-  return (0.2126 * ((color >> 16) & 255) + 0.7152 * ((color >> 8) & 255) + 0.0722 * (color & 255)) / 255
-}
-
-function css(color: number) {
-  return `#${color.toString(16).padStart(6, "0")}`
-}
-
-function ease(value: number) {
-  const k = clamp01(value)
-
-  return k * k * (3 - 2 * k)
-}
-
-function smoothstep(edge0: number, edge1: number, value: number) {
-  return ease((value - edge0) / (edge1 - edge0))
-}
-
-function clamp01(value: number) {
-  return Math.min(1, Math.max(0, value))
-}
-
-function normalize(x: number, y: number, z: number) {
-  const length = Math.hypot(x, y, z)
-
-  return [x / length, y / length, z / length]
 }
